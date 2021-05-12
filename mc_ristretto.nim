@@ -16,6 +16,11 @@ func reduceToScalar(
   res: ptr uint8
 ) {.importc: "reduce_to_scalar".}
 
+func reduceToScalarWide(
+  scalar: ptr uint8,
+  res: ptr uint8
+) {.importc: "reduce_to_scalar_wide".}
+
 func verifyPoint(
   point: ptr uint8
 ): bool {.importc: "verify_point".}
@@ -68,10 +73,25 @@ func verify(
 {.pop.}
 
 type
+  Scalar* = object
+    data: array[32, uint8]
   PrivateKey* = object
-    data: array[64, uint8]
+    scalar: Scalar
+    nonce: array[32, uint8]
   PublicKey* = object
     data: array[32, uint8]
+
+func newScalar*(
+  scalar: seq[byte]
+): Scalar {.raises: [
+  ValueError
+].} =
+  if scalar.len == 32:
+    reduceToScalar(unsafeAddr scalar[0], addr result.data[0])
+  elif scalar.len == 64:
+    reduceToScalarWide(unsafeAddr scalar[0], addr result.data[0])
+  else:
+    raise newException(ValueError, "Invalid scalar length.")
 
 func newPrivateKey*(
   key: seq[byte]
@@ -80,9 +100,13 @@ func newPrivateKey*(
 ].} =
   if key.len != 64:
     raise newException(ValueError, "Invalid private key length.")
-  copyMem(addr result.data[0], unsafeAddr key[0], 64)
-  #Works since only the first 32 bytes will be read/written and the scalar is first.
-  reduceToScalar(addr result.data[0], addr result.data[0])
+  result.scalar = newScalar(key[0 ..< 32])
+  copyMem(addr result.nonce[0], unsafeAddr key[32], 32)
+
+converter toScalar*(
+  key: PrivateKey
+): Scalar {.inline, raises: [].} =
+  key.scalar
 
 #Does not validate the public key.
 func newPublicKey*(
@@ -105,29 +129,34 @@ func valid*(
 func toPublicKey*(
   key: PrivateKey
 ): PublicKey {.inline, raises: [].} =
-  toPoint(unsafeAddr key.data[0], addr result.data[0])
+  toPoint(unsafeAddr key.scalar.data[0], addr result.data[0])
+
+func toPoint*(
+  scalar: Scalar
+): PublicKey {.inline, raises: [].} =
+  toPoint(unsafeAddr scalar.data[0], addr result.data[0])
 
 func `+`*(
-  x: PrivateKey,
-  y: PrivateKey
-): PrivateKey {.inline, raises: [].} =
+  x: Scalar,
+  y: Scalar
+): Scalar {.inline, raises: [].} =
   addScalar(unsafeAddr x.data[0], unsafeAddr y.data[0], addr result.data[0])
 
 func `*`*(
-  x: PrivateKey,
-  y: PrivateKey
-): PrivateKey {.inline, raises: [].} =
+  x: Scalar,
+  y: Scalar
+): Scalar {.inline, raises: [].} =
   mulScalar(unsafeAddr x.data[0], unsafeAddr y.data[0], addr result.data[0])
 
 func `*`*(
-  x: PrivateKey,
+  x: Scalar,
   y: PublicKey
 ): PublicKey {.inline, raises: [].} =
   mulPoint(unsafeAddr x.data[0], unsafeAddr y.data[0], addr result.data[0])
 
 func `*`*(
   x: PublicKey,
-  y: PrivateKey
+  y: Scalar
 ): PublicKey {.inline, raises: [].} =
   y * x
 
@@ -143,17 +172,17 @@ func sign*(
 ): seq[byte] {.raises: [].} =
   result = newSeq[byte](64)
   let msgPtr: ptr uint8 = cast[ptr uint8](if msg.len == 0: nil else: unsafeAddr msg[0])
-  sign(unsafeAddr key.data[0], unsafeAddr key.data[32], msgPtr, uint32(msg.len), addr result[0])
+  sign(unsafeAddr key.scalar.data[0], unsafeAddr key.nonce[0], msgPtr, uint32(msg.len), addr result[0])
 
 func verify*(
   key: PublicKey,
   msg: string,
   sig: seq[byte]
-): bool {.raises: [].} =
-  #Done here since we pass a pointer to Rust.
-  #Rust can't check the length via a pointer alone.
+): bool {.raises: [
+  ValueError
+].} =
   if sig.len != 64:
-    return false
+    raise newException(ValueError, "Invalid length signature passed to verify.")
 
   #Reject signatures for the identity point, as this generally denotes a blank value not meant to be used.
   #In Meros, the identity point is meant to be a singular burn address, though any invalid point would work.
@@ -170,9 +199,14 @@ func verify*(
   verify(unsafeAddr key.data[0], msgPtr, uint32(msg.len), unsafeAddr sig[0])
 
 func serialize*(
-  key: PrivateKey or PublicKey
+  key: Scalar or PublicKey
 ): seq[byte] {.inline, raises: [].} =
   @(key.data)
+
+func serialize*(
+  key: PrivateKey
+): seq[byte] {.inline, raises: [].} =
+  @(key.scalar.data) & @(key.nonce)
 
 func `$`*(
   key: PublicKey
@@ -184,11 +218,23 @@ func `$`*(
   result = result.toHex()
 
 func `==`*(
+  x: Scalar,
+  y: Scalar
+): bool {.inline, raises: [].} =
+  x.data == y.data
+
+func `!=`*(
+  x: Scalar,
+  y: Scalar
+): bool {.inline, raises: [].} =
+  not (x == y)
+
+func `==`*(
   x: PrivateKey,
   y: PrivateKey
 ): bool {.inline, raises: [].} =
   #Only check the scalar portion.
-  x.data[0 ..< 32] == y.data[0 ..< 32]
+  x.scalar == y.scalar
 
 func `!=`*(
   x: PrivateKey,

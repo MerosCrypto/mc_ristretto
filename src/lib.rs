@@ -20,6 +20,18 @@ pub unsafe extern "C" fn reduce_to_scalar(
 }
 
 #[no_mangle]
+pub unsafe extern "C" fn reduce_to_scalar_wide(
+  scalar: *const u8,
+  res: *mut u8
+) {
+  slice::from_raw_parts_mut(res, 32).copy_from_slice(
+    &Scalar::from_bytes_mod_order_wide(
+      slice::from_raw_parts(scalar, 64).try_into().unwrap()
+    ).to_bytes()
+  )
+}
+
+#[no_mangle]
 pub unsafe extern "C" fn verify_point(
   point: *const u8
 ) -> bool {
