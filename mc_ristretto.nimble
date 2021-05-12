@@ -1,4 +1,4 @@
-version     = "0.1.0"
+version     = "0.1.1"
 author      = "Luke Parker"
 description = "A Nim Wrapper for dalek's Ristretto functionality as needed by Meros."
 license     = "MIT"
@@ -8,7 +8,8 @@ installFiles = @[
 ]
 
 installDirs = @[
-  "src"
+  "src",
+  "target"
 ]
 
 requires "nim > 1.2.10"
