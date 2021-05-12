@@ -8,8 +8,7 @@ installFiles = @[
 ]
 
 installDirs = @[
-  "src",
-  "target"
+  "src"
 ]
 
 requires "nim > 1.2.10"
