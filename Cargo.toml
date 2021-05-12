@@ -1,0 +1,13 @@
+[package]
+name = "mc_ristretto"
+version = "0.1.0"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+edition = "2018"
+
+[lib]
+name = "mc_ristretto"
+crate-type = ["staticlib"]
+
+[dependencies]
+blake2 = "0.9.1"
+curve25519-dalek = "3.1.0"
