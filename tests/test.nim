@@ -3,7 +3,7 @@ import strutils
 #Dev dependency of stint.
 import stint
 
-import mc_ristretto
+import ../mc_ristretto
 
 const
   BASEPOINT: string = parseHexStr("e2f2ae0a6abc4e71a884a961c500515f58e30b6aa582dd8db6a65945e08d2d76")

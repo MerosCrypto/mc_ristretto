@@ -1,4 +1,4 @@
-version     = "0.2.0"
+version     = "0.2.1"
 author      = "Luke Parker"
 description = "A Nim Wrapper for dalek's Ristretto functionality as needed by Meros."
 license     = "MIT"

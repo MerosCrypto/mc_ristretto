@@ -9,7 +9,7 @@ when not defined(Windows):
   {.passL: "-lpthread".}
 {.passL: "-lmc_ristretto".}
 
-{.push header: "wrapper.h".}
+{.push header: "mc_ristretto.h".}
 
 func reduceToScalar(
   scalar: ptr uint8,
