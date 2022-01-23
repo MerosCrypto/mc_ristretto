@@ -124,21 +124,19 @@ pub unsafe extern "C" fn to_point(
 
 fn sign_safe(
   scalar: Scalar,
-  nonce: &[u8],
   msg: &[u8]
 ) -> Vec<u8> {
-  let r: Scalar = Scalar::from_hash(Blake2b::new().chain(nonce).chain(msg));
+  let r: Scalar = Scalar::from_hash(Blake2b::new().chain(scalar.to_bytes()).chain(msg));
   let R: [u8; 32] = (&r * &constants::RISTRETTO_BASEPOINT_TABLE).compress().to_bytes();
   let A: [u8; 32] = (&scalar * &constants::RISTRETTO_BASEPOINT_TABLE).compress().to_bytes();
   let HRAM: Scalar = Scalar::from_hash(Blake2b::new().chain(&R).chain(&A).chain(msg));
-  let S: [u8; 32] = (r + (HRAM * scalar)).to_bytes();
-  [R, S].concat()
+  let s: [u8; 32] = (r + (HRAM * scalar)).to_bytes();
+  [R, s].concat()
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn sign(
   scalar: *const u8,
-  nonce: *const u8,
   msg: *const u8,
   msg_len: u32,
   res: *mut u8
@@ -146,7 +144,6 @@ pub unsafe extern "C" fn sign(
   slice::from_raw_parts_mut(res, 64).copy_from_slice(
     &sign_safe(
       Scalar::from_canonical_bytes(slice::from_raw_parts(scalar, 32).try_into().unwrap()).unwrap(),
-      slice::from_raw_parts(nonce, 32),
       //Unfortunately will not work on 8 and 16-bit platforms.
       //Won't fix.
       slice::from_raw_parts(msg, msg_len.try_into().unwrap())
@@ -160,10 +157,10 @@ fn verify_safe(
   msg: &[u8],
   R: ristretto::RistrettoPoint,
   R_bytes: &[u8],
-  S: Scalar
+  s: Scalar
 ) -> bool {
   let HRAM: Scalar = Scalar::from_hash(Blake2b::new().chain(R_bytes).chain(A_bytes).chain(msg));
-  R == ristretto::RistrettoPoint::vartime_double_scalar_mul_basepoint(&HRAM, &-A, &S)
+  R == ristretto::RistrettoPoint::vartime_double_scalar_mul_basepoint(&HRAM, &-A, &s)
 }
 
 #[no_mangle]
@@ -179,16 +176,16 @@ pub unsafe extern "C" fn verify(
   let sig: &[u8] = slice::from_raw_parts(sig, 64);
   let R_bytes: &[u8] = &sig[..32];
   let R: Option<ristretto::RistrettoPoint> = ristretto::CompressedRistretto::from_slice(R_bytes).decompress();
-  let S: Option<Scalar> = Scalar::from_canonical_bytes(sig[32..].try_into().unwrap());
+  let s: Option<Scalar> = Scalar::from_canonical_bytes(sig[32..].try_into().unwrap());
 
-  if let (Some(A), Some(R), Some(S)) = (A, R, S) {
+  if let (Some(A), Some(R), Some(s)) = (A, R, s) {
     verify_safe(
       A,
       A_bytes,
       slice::from_raw_parts(msg, msg_len.try_into().unwrap()),
       R,
       R_bytes,
-      S
+      s
     )
   } else {
     false

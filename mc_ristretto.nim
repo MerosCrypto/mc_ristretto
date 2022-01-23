@@ -54,10 +54,9 @@ func toPoint(
   res: ptr uint8
 ) {.importc: "to_point".}
 
-#EdDSA sign using Blake2b-512.
+#Schnorr sign using Blake2b-512.
 func sign(
   scalar: ptr uint8,
-  nonce: ptr uint8,
   msg: ptr uint8,
   msgLen: uint32,
   res: ptr uint8
@@ -75,9 +74,7 @@ func verify(
 type
   Scalar* = object
     data: array[32, uint8]
-  PrivateKey* = object
-    scalar: Scalar
-    nonce: array[32, uint8]
+  PrivateKey* = Scalar
   PublicKey* = object
     data: array[32, uint8]
 
@@ -93,20 +90,10 @@ func newScalar*(
   else:
     raise newException(ValueError, "Invalid scalar length.")
 
-func newPrivateKey*(
+template newPrivateKey*(
   key: seq[byte]
-): PrivateKey {.raises: [
-  ValueError
-].} =
-  if key.len != 64:
-    raise newException(ValueError, "Invalid private key length.")
-  result.scalar = newScalar(key[0 ..< 32])
-  copyMem(addr result.nonce[0], unsafeAddr key[32], 32)
-
-converter toScalar*(
-  key: PrivateKey
-): Scalar {.inline, raises: [].} =
-  key.scalar
+): PrivateKey =
+  newScalar(key)
 
 #Does not validate the public key.
 func newPublicKey*(
@@ -126,15 +113,15 @@ func valid*(
 ): bool {.raises: [].} =
   verifyPoint(unsafeAddr key.data[0])
 
-func toPublicKey*(
-  key: PrivateKey
-): PublicKey {.inline, raises: [].} =
-  toPoint(unsafeAddr key.scalar.data[0], addr result.data[0])
-
 func toPoint*(
   scalar: Scalar
 ): PublicKey {.inline, raises: [].} =
   toPoint(unsafeAddr scalar.data[0], addr result.data[0])
+
+template toPublicKey*(
+  key: PrivateKey
+): PublicKey =
+  toPoint(key)
 
 func `+`*(
   x: Scalar,
@@ -172,7 +159,7 @@ func sign*(
 ): seq[byte] {.raises: [].} =
   result = newSeq[byte](64)
   let msgPtr: ptr uint8 = cast[ptr uint8](if msg.len == 0: nil else: unsafeAddr msg[0])
-  sign(unsafeAddr key.scalar.data[0], unsafeAddr key.nonce[0], msgPtr, uint32(msg.len), addr result[0])
+  sign(unsafeAddr key.data[0], msgPtr, uint32(msg.len), addr result[0])
 
 func verify*(
   key: PublicKey,
@@ -186,11 +173,10 @@ func verify*(
 
   #Reject signatures for the identity point, as this generally denotes a blank value not meant to be used.
   #In Meros, the identity point is meant to be a singular burn address, though any invalid point would work.
-  #Technically breaks from EdDSA by adding this extra condition, yet this is targeted for Meros.
-  #If anyone has a valid reason to EdDSA off of the identity, this arguably should be in Meros anyways. Let me know.
+  #Technically breaks from Schnorr by adding this extra condition, yet this is targeted for Meros.
+  #If anyone has a valid reason to Schnorr off of the identity, this arguably should be in Meros anyways. Let me know.
   #As one other side note, this arguably should be implemented on the Rust side of things.
   #Then we could do an actual equality, yet this encoding based check is fully secure given our canonicity requirements.
-  #It's likely also faster as it involves no mathematical ops.
   #-- Kayaba
   if @(key.data) == newSeq[byte](32):
     return false
@@ -202,11 +188,6 @@ func serialize*(
   key: Scalar or PublicKey
 ): seq[byte] {.inline, raises: [].} =
   @(key.data)
-
-func serialize*(
-  key: PrivateKey
-): seq[byte] {.inline, raises: [].} =
-  @(key.scalar.data) & @(key.nonce)
 
 func `$`*(
   key: PublicKey
@@ -226,19 +207,6 @@ func `==`*(
 func `!=`*(
   x: Scalar,
   y: Scalar
-): bool {.inline, raises: [].} =
-  not (x == y)
-
-func `==`*(
-  x: PrivateKey,
-  y: PrivateKey
-): bool {.inline, raises: [].} =
-  #Only check the scalar portion.
-  x.scalar == y.scalar
-
-func `!=`*(
-  x: PrivateKey,
-  y: PrivateKey
 ): bool {.inline, raises: [].} =
   not (x == y)
 

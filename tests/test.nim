@@ -17,7 +17,7 @@ if base.serialize() != cast[seq[byte]](BASEPOINT):
   raise newException(Exception, "Failed to serialize a parsed point.")
 
 #Check invalid points appear as invalid.
-let invalid: PublicKey = newPublicKey(cast[seq[byte]](cast[seq[byte]](BASEPOINT)[0 ..< 31]) & @[byte(0)])
+let invalid: PublicKey = newPublicKey(cast[seq[byte]](BASEPOINT)[0 ..< 31] & @[byte(0)])
 if invalid.valid:
   raise newException(Exception, "Invalid point considered valid.")
 
@@ -61,26 +61,18 @@ let
 if newScalar(WIDE_VALUE).serialize() != WIDE_REDUCED:
   raise newException(Exception, "Failed to reduce a 64-byte value.")
 
-#Test Scalar/PrivateKey serialization.
+#Test Scalar serialization.
 if one.serialize() != oneBytes:
   raise newException(Exception, "Failed to serialize a parsed scalar.")
-if newPrivateKey(oneBytes & newSeq[byte](32)).serialize() != (oneBytes & newSeq[byte](32)):
-  echo cast[string](newPrivateKey(oneBytes & newSeq[byte](32)).serialize()).toHex()
-  echo cast[string](oneBytes & newSeq[byte](32)).toHex()
-  raise newException(Exception, "Failed to serialize a parsed private key.")
 
 #Check serialization of calculated points.
 if (base + base).serialize() != cast[seq[byte]](parseHexStr("6a493210f7499cd17fecb510ae0cea23a110e8d5b901f8acadd3095c73a3b919")):
   raise newException(Exception, "Couldn't serialize a calulcated point/addition AND multiplication are wrong.")
 
-#Check toPoint and toPublicKey return the same result.
-if one.toPoint() != newPrivateKey(oneBytes & newSeq[byte](32)).toPublicKey():
-  raise newException(Exception, "Scalar's toPoint returned a different value than PrivateKey's toPrivateKey.")
-
 #Sign and verify a signature.
 const msg: string = "Hello, World!"
 let
-  key: PrivateKey = newPrivateKey(twoBytes & (two + one).serialize())
+  key: PrivateKey = newPrivateKey(twoBytes)
   sig: seq[byte] = key.sign(msg)
 if not key.toPublicKey().verify(msg, sig):
   raise newException(Exception, "Sign/verify didn't work.")
@@ -104,9 +96,11 @@ if key.toPublicKey().verify(msg, cast[seq[byte]](BASEPOINT) & sig[32 ..< 64]):
   raise newException(Exception, "Different R verified for a signature.")
 
 #Unreduced scalar in signature.
+#Guaranteed to be > l as l only uses 252 bits. It would take several additions to hit the 32-byte overflow.
 let unreduced: seq[byte] = @((StUInt[256].fromBytesLE(sig[32 ..< 64]) + l).toBytesLE())
-#Check this was properly modified. newPrivateKey should reduce it back to itself. Also tests reduction (enabling using raw urandom for keys).
-if newPrivateKey(unreduced & newSeq[byte](32)) != newPrivateKey(sig[32 ..< 64] & newSeq[byte](32)):
+#Check this was properly modified. newPrivateKey should reduce it back to itself.
+#Also tests reduction (enabling using raw urandom for keys).
+if newPrivateKey(unreduced & newSeq[byte](32)) != newPrivateKey(sig[32 ..< 64]):
   raise newException(Exception, "newPrivateKey didn't reduce a scalar/failed to add the modulus to a scalar.")
 if key.toPublicKey().verify(msg, sig[0 ..< 32] & unreduced):
   raise newException(Exception, "Unreduced S verified for a signature.")
@@ -120,7 +114,7 @@ if not key.toPublicKey().verify("", key.sign("")):
   raise newException(Exception, "Couldn't sign and verify an empty message.")
 
 #Test signatures for the identity point fail. A 0 bytestring generally denotes something never meant to be used.
-let zero: PrivateKey = newPrivateKey(newSeq[byte](64))
+let zero: PrivateKey = newPrivateKey(newSeq[byte](32))
 if zero.toPublicKey().verify(msg, zero.sign(msg)):
   raise newException(Exception, "Signature for the identity point was accepted.")
 
